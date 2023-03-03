@@ -255,7 +255,7 @@ def test(rank, args, shared_model, counter):
                 time.strftime("%Hh %Mm %Ss",
                               time.gmtime(time.time() - start_time)),
                 counter.value, counter.value / (time.time() - start_time),
-                reward_sum, info['x_pos']/x_norm, episode_length))
+                reward_sum, info['x_pos']/x_norm, episode_length), flush = True)
 
             data = [time.time() - ep_start_time,
                     counter.value, reward_sum, info['x_pos']/x_norm, episode_length]
