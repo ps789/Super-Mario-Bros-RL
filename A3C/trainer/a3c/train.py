@@ -110,7 +110,7 @@ def train(rank, args, shared_model, counter, lock, optimizer=None, select_sample
 
             action_out = int(action[0, 0].data.numpy())
             state, reward, done, info = env.step(action_out)
-            env.render()
+            # env.render()
             cum_rew = cum_rew + reward
 
             done = done or episode_length >= args.max_episode_length

@@ -53,7 +53,7 @@ parser.add_argument('--pos_stuck', type= bool, default=False,
 
 mp = _mp.get_context('spawn')
 
-#print("Cuda: " + str(torch.cuda.is_available()))
+# print("Cuda: " + str(torch.cuda.is_available()))
 
 if __name__ == '__main__':
     os.environ['OMP_NUM_THREADS'] = '1'
