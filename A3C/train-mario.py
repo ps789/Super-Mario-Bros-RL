@@ -36,7 +36,7 @@ parser.add_argument('--num-steps', type=int, default=50,
                     help='number of forward steps in A3C (default: 50)')
 parser.add_argument('--max-episode-length', type=int, default=1000000,
                     help='maximum length of an episode (default: 1000000)')
-parser.add_argument('--env-name', default='SuperMarioBrosNoFrameskip-1-1-v0',
+parser.add_argument('--env-name', default='SuperMarioBros-v0',
                     help='environment to train on (default: SuperMarioBrosNoFrameskip-1-1-v0)')
 parser.add_argument('--no-shared', type=bool, default=False,
                     help='use an optimizer without shared momentum.')
@@ -57,19 +57,19 @@ mp = _mp.get_context('spawn')
 
 if __name__ == '__main__':
     os.environ['OMP_NUM_THREADS'] = '1'
-        
+
     args = parser.parse_args()
     SAVEPATH = os.getcwd() + '/save/default_'+ args.reward_type +'/mario_a3c_params.pkl'
     if not os.path.exists(os.getcwd() + '/save/default_'+ args.reward_type):
         os.makedirs(os.getcwd() + '/save/default_'+ args.reward_type)
-    
-    env = create_mario_env(args.env_name, args.reward_type)    
+
+    env = create_mario_env(args.env_name, args.reward_type)
 
     shared_model = ActorCritic(
         env.observation_space.shape[0], len(ACTIONS))
 
     shared_model.share_memory()
-    
+
     if os.path.isfile(SAVEPATH):
         print('Loading A3C parameters ...')
         shared_model.load_state_dict(torch.load(SAVEPATH))
@@ -79,7 +79,7 @@ if __name__ == '__main__':
     optimizer = SharedAdam(shared_model.parameters(), lr=args.lr)
     optimizer.share_memory()
 
-    print ("No of available cores : {}".format(mp.cpu_count())) 
+    print ("No of available cores : {}".format(mp.cpu_count()))
 
     processes = []
 
@@ -87,15 +87,15 @@ if __name__ == '__main__':
     lock = mp.Lock()
 
     p = mp.Process(target=test, args=(args.num_processes, args, shared_model, counter))
-    
+
     p.start()
     processes.append(p)
 
     num_procs = args.num_processes
     no_sample = args.non_sample
-   
+
     if args.num_processes > 1:
-        num_procs = args.num_processes - 1    
+        num_procs = args.num_processes - 1
 
     sample_val = num_procs - no_sample
 

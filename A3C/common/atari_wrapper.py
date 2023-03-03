@@ -2,14 +2,14 @@ import numpy as np
 from collections import deque
 import gym
 import gym_super_mario_bros
-from nes_py.wrappers import BinarySpaceToDiscreteSpaceEnv, PenalizeDeathEnv
+from nes_py.wrappers import JoypadSpace
 from gym_super_mario_bros.actions import SIMPLE_MOVEMENT, COMPLEX_MOVEMENT, RIGHT_ONLY
 SIMPLE_MOVEMENT = SIMPLE_MOVEMENT[1:]
 from gym import spaces
 from PIL import Image
 import cv2
 
-PALETTE_ACTIONS = [['NOP'],
+PALETTE_ACTIONS = [['NOOP'],
  ['up'],
  ['down'],
  ['left'],
@@ -26,7 +26,7 @@ PALETTE_ACTIONS = [['NOP'],
  ]
 def _process_frame_mario(frame):
     if frame is not None:           # for future meta implementation
-        img = np.reshape(frame, [240, 256, 3]).astype(np.float32)        
+        img = np.reshape(frame, [240, 256, 3]).astype(np.float32)
         img = img[:, :, 0] * 0.299 + img[:, :, 1] * 0.587 + img[:, :, 2] * 0.114
         x_t = cv2.resize(img, (84, 84))
         x_t = np.reshape(x_t, [1, 84, 84])/255.0
@@ -51,33 +51,33 @@ class ProcessFrameMario(gym.Wrapper):
         self.counter = 0
 
     def step(self, action):
-        ''' 
+        '''
             Implementing custom rewards
                 Time = -0.1
-                Distance = +1 or 0 
+                Distance = +1 or 0
                 Player Status = +/- 5
                 Score = 2.5 x [Increase in Score]
                 Done = +50 [Game Completed] or -50 [Game Incomplete]
         '''
         obs, _, done, info = self.env.step(action)
-        
+
         if self.reward_type == 'sparse':
-            reward = 0 
-            if (self.counter < len(self.milestones)) and (info['x_pos'] > self.milestones[self.counter])  : 
-                reward = 10 
-                self.counter = self.counter + 1 
-            
-            if done : 
+            reward = 0
+            if (self.counter < len(self.milestones)) and (info['x_pos'] > self.milestones[self.counter])  :
+                reward = 10
+                self.counter = self.counter + 1
+
+            if done :
                 if info['flag_get'] :
                     reward = 50
                 else:
                     reward = -10
-            
+
         elif self.reward_type == 'dense':
-            
+
             reward = max(min((info['x_pos'] - self.prev_dist - 0.05), 2), -2)
             self.prev_dist = info['x_pos']
-            
+
             reward += (self.prev_time - info['time']) * -0.1
             self.prev_time = info['time']
 
@@ -92,9 +92,9 @@ class ProcessFrameMario(gym.Wrapper):
                     reward += 500
                 else:
                     reward -= 50
-                    
+
         else : return None
-        
+
         return _process_frame_mario(obs), reward/10, done, info
 
     def reset(self):
@@ -123,7 +123,7 @@ class BufferSkipFrames(gym.Wrapper):
         total_reward = reward
         self.buffer.append(obs)
 
-        for i in range(self.skip - 1):            
+        for i in range(self.skip - 1):
             if not done:
                 obs, reward, done, info = self.env.step(action)
                 total_reward += reward
@@ -145,7 +145,7 @@ class BufferSkipFrames(gym.Wrapper):
         frame = np.stack(self.buffer, axis=0)
         frame = np.reshape(frame, (4, 84, 84))
         return frame
-    
+
     def change_level(self, level):
         self.env.change_level(level)
 
@@ -170,7 +170,7 @@ class NormalizedEnv(gym.ObservationWrapper):
             unbiased_std = self.state_std / (1 - pow(self.alpha, self.num_steps))
 
             return (observation - unbiased_mean) / (unbiased_std + 1e-8)
-        
+
         else:
             return observation
 
@@ -186,6 +186,6 @@ def wrap_mario(env, reward_type):
 
 def create_mario_env(env_id,  reward_type):
     env = gym_super_mario_bros.make(env_id)
-    env = BinarySpaceToDiscreteSpaceEnv(env, PALETTE_ACTIONS)
+    env = JoypadSpace(env, PALETTE_ACTIONS)
     env = wrap_mario(env, reward_type)
     return env

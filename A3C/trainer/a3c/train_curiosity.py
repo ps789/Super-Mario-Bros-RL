@@ -50,37 +50,37 @@ def train(rank, args, shared_model, shared_curiosity, counter, lock, optimizer=N
     model = ActorCritic(env.observation_space.shape[0], len(ACTIONS))
     if optimizer is None:
         optimizer = optim.Adam(list(shared_model.parameters()) + list(shared_curiosity.parameters()), lr=args.lr)
-        
+
     curiosity = ICM(env.observation_space.shape[0], len(ACTIONS))
 #     cur_optimizer = optim.Adam(shared_curiosity.parameters(), lr=args.lr)
-    
+
     model.train()
     curiosity.train()
 
     state = env.reset()
-    cum_rew = 0 
+    cum_rew = 0
     state = torch.from_numpy(state)
     done = True
-    
+
     episode_length = 0
     for num_iter in count():
         #env.render()
         if rank == 0:
-            
+
             if num_iter % args.save_interval == 0 and num_iter > 0:
-                print ("Saving model at :" + saveweights)            
+                print ("Saving model at :" + saveweights)
                 torch.save(shared_model.state_dict(), saveweights)
                 torch.save(shared_curiosity.state_dict(), saveweights[:-4] + '_curiosity.pkl')
 
-        if num_iter % (args.save_interval * 2.5) == 0 and num_iter > 0 and rank == 1:    # Second saver in-case first processes crashes 
-            print ("Saving model for process 1 at :" + saveweights)            
+        if num_iter % (args.save_interval * 2.5) == 0 and num_iter > 0 and rank == 1:    # Second saver in-case first processes crashes
+            print ("Saving model for process 1 at :" + saveweights)
             torch.save(shared_model.state_dict(), saveweights)
             torch.save(shared_curiosity.state_dict(), saveweights[:-4] + '_curiosity.pkl')
-            
+
         # Sync with the shared model
         model.load_state_dict(shared_model.state_dict())
         curiosity.load_state_dict(shared_curiosity.state_dict())
-        
+
         if done:
             cx = Variable(torch.zeros(1, 512)).type(FloatTensor)
             hx = Variable(torch.zeros(1, 512)).type(FloatTensor)
@@ -95,44 +95,45 @@ def train(rank, args, shared_model, shared_curiosity, counter, lock, optimizer=N
         forward_losses = []
         inverse_losses = []
         #reason =''
-        
+
         for step in range(args.num_steps):
-            episode_length += 1            
+            episode_length += 1
             state_inp = Variable(state.unsqueeze(0)).type(FloatTensor)
             value, logit, (hx, cx) = model((state_inp, (hx, cx)))
             prob = F.softmax(logit, dim=-1)
             log_prob = F.log_softmax(logit, dim=-1)
             entropy = -(log_prob * prob).sum(-1, keepdim=True)
             entropies.append(entropy)
-            
-            
+
+
             if select_sample:
                 action = prob.multinomial(1).data
             else:
                 action = prob.max(-1, keepdim=True)[1].data
-                
+
             log_prob = log_prob.gather(-1, Variable(action))
-            
+
             action_out = int(action[0, 0].data.numpy())
             state, reward, done, info = env.step(action_out)
+            #env.render()
             cum_rew = cum_rew + reward
-            
+
             action_one_hot = (torch.eye(len(ACTIONS))[action_out]).view(1,-1)
-            
+
             next_state_inp = Variable(torch.from_numpy(state).unsqueeze(0)).type(FloatTensor)
             logits_pred, pred_phi, actual_phi = curiosity((state_inp, next_state_inp, action_one_hot))
-            
+
             inverse_loss = cross_entropy(logits_pred, action[0])/len(ACTIONS)
             forward_loss = ((pred_phi - actual_phi).pow(2)).sum(-1, keepdim=True)/2
-            
+
             done = done or episode_length >= args.max_episode_length
-            
+
             int_reward = (args.eta*forward_loss).data.numpy()[0,0]
-            
+
             reward = int_reward + reward
             reward = max(min(reward, 50), -5)
-            
-            
+
+
             with lock:
                 counter.value += 1
 
@@ -143,7 +144,7 @@ def train(rank, args, shared_model, shared_curiosity, counter, lock, optimizer=N
                 with open(savefile[:-4]+'_{}.csv'.format(rank), 'a', newline='') as sfile:
                     writer = csv.writer(sfile)
                     writer.writerows([[cum_rew, info['x_pos']/x_norm]])
-                cum_rew = 0 
+                cum_rew = 0
  #               print ("Process {} has completed.".format(rank))
 
 #            env.locked_levels = [False] + [True] * 31
@@ -153,8 +154,8 @@ def train(rank, args, shared_model, shared_curiosity, counter, lock, optimizer=N
             rewards.append(reward)
             forward_losses.append(forward_loss)
             inverse_losses.append(inverse_loss)
-            
-            
+
+
             if done:
                 break
 
@@ -180,26 +181,26 @@ def train(rank, args, shared_model, shared_curiosity, counter, lock, optimizer=N
             gae = gae * args.gamma * args.tau + delta_t
 
             policy_loss = policy_loss - log_probs[i] * Variable(gae).type(FloatTensor) - args.entropy_coef * entropies[i]
-            
+
             curiosity_loss += (1 - args.beta)*inverse_losses[i] + args.beta*forward_losses[i]
-            
+
         total_loss = args.lambd*(policy_loss + args.value_loss_coef * value_loss)
-        
+
 #        print ("Process {} loss :".format(rank), total_loss.data)
         optimizer.zero_grad()
 #         cur_optimizer.zero_grad()
-        
+
         (total_loss + 10.0*curiosity_loss).backward()
 #         (curiosity_loss).backward()
-        
+
         torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
         torch.nn.utils.clip_grad_norm_(curiosity.parameters(), args.max_grad_norm)
 
         ensure_shared_grads(model, shared_model)
         ensure_shared_grads(curiosity, shared_curiosity)
-        
+
         optimizer.step()
-        
+
 #    print(rank)
 #    print ("Process {} closed.".format(rank))
 
@@ -211,12 +212,12 @@ def test(rank, args, shared_model, counter):
     ByteTensor = torch.ByteTensor# torch.cuda.ByteTensor if args.use_cuda else torch.ByteTensor
 
     env = create_mario_env(args.env_name, args.reward_type)
-    """ 
+    """
         need to implement Monitor wrapper with env.change_level
     """
     # expt_dir = 'video'
     # env = wrappers.Monitor(env, expt_dir, force=True, video_callable=lambda count: count % 10 == 0)
-    
+
     #env.seed(args.seed + rank)
 
     model = ActorCritic(env.observation_space.shape[0], len(ACTIONS))
@@ -227,11 +228,11 @@ def test(rank, args, shared_model, counter):
     reward_sum = 0
     done = True
     savefile = os.getcwd() + '/save/curiosity_'+ args.reward_type +'/mario_curves.csv'
-    
+
     title = ['Time','No. Steps', 'Total Reward', 'final_position', 'Episode Length']
     with open(savefile, 'a', newline='') as sfile:
         writer = csv.writer(sfile)
-        writer.writerow(title)    
+        writer.writerow(title)
 
     start_time = time.time()
 
@@ -256,7 +257,7 @@ def test(rank, args, shared_model, counter):
             with torch.no_grad():
                 cx = Variable(cx.data).type(FloatTensor)
                 hx = Variable(hx.data).type(FloatTensor)
-        
+
 
         with torch.no_grad(): state_inp = Variable(state.unsqueeze(0)).type(FloatTensor)
         value, logit, (hx, cx) = model((state_inp, (hx, cx)))
@@ -282,17 +283,17 @@ def test(rank, args, shared_model, counter):
         if done:
             print("Time {}, num steps {}, FPS {:.0f}, episode reward {:.3f}, distance covered {:.3f}, episode length {}".format(
                 time.strftime("%Hh %Mm %Ss",
-                              time.gmtime(time.time() - start_time)), 
+                              time.gmtime(time.time() - start_time)),
                 counter.value, counter.value / (time.time() - start_time),
                 reward_sum, info['x_pos']/x_norm, episode_length))
-            
+
             data = [time.time() - ep_start_time,
                     counter.value, reward_sum, info['x_pos']/x_norm, episode_length]
-            
+
             with open(savefile, 'a', newline='') as sfile:
                 writer = csv.writer(sfile)
                 writer.writerows([data])
-            
+
             reward_sum = 0
             episode_length = 0
             actions.clear()
