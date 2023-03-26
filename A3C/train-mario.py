@@ -36,7 +36,7 @@ parser.add_argument('--num-steps', type=int, default=50,
                     help='number of forward steps in A3C (default: 50)')
 parser.add_argument('--max-episode-length', type=int, default=1000000,
                     help='maximum length of an episode (default: 1000000)')
-parser.add_argument('--env-name', default='SuperMarioBros-v0',
+parser.add_argument('--env-name', default='SuperMarioBros-1-1-v0',
                     help='environment to train on (default: SuperMarioBrosNoFrameskip-1-1-v0)')
 parser.add_argument('--no-shared', type=bool, default=False,
                     help='use an optimizer without shared momentum.')
@@ -44,7 +44,7 @@ parser.add_argument('--save-interval', type=int, default=10,
                     help='model save interval (default: 10)')
 #parser.add_argument('--save-path',default=SAVEPATH,
 #                    help='model save interval (default: {})'.format(SAVEPATH))
-parser.add_argument('--non-sample', type=int,default=2,
+parser.add_argument('--non-sample', type=int,default=8,
                     help='number of non sampling processes (default: 2)')
 parser.add_argument('--reward_type', type=str, default='dense',
                     help='define the reward type (default: dense)')

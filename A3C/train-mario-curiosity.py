@@ -29,9 +29,9 @@ parser.add_argument('--value-loss-coef', type=float, default=0.5,
                     help='value loss coefficient (default: 0.5)')
 parser.add_argument('--max-grad-norm', type=float, default=250,
                     help='value loss coefficient (default: 250)')
-parser.add_argument('--seed', type=int, default=1,
+parser.add_argument('--seed', type=int, default=14,
                     help='random seed (default: 4)')
-parser.add_argument('--num-processes', type=int, default=4,
+parser.add_argument('--num-processes', type=int, default=16,
                     help='how many training processes to use (default: 4)')
 parser.add_argument('--num-steps', type=int, default=50,
                     help='number of forward steps in A3C (default: 50)')
@@ -45,7 +45,7 @@ parser.add_argument('--save-interval', type=int, default=10,
                     help='model save interval (default: 10)')
 #parser.add_argument('--save-path',default=SAVEPATH,
 #                    help='model save interval (default: {})'.format(SAVEPATH))
-parser.add_argument('--non-sample', type=int,default=2,
+parser.add_argument('--non-sample', type=int,default=7,
                     help='number of non sampling processes (default: 2)')
 parser.add_argument('--reward_type', type=str, default='dense',
                     help='define the reward type (default: dense)')
@@ -78,9 +78,8 @@ if __name__ == '__main__':
 
     shared_icm = ICM(env.observation_space.shape[0], len(ACTIONS))
     shared_icm.share_memory()
-
     if os.path.isfile(SAVEPATH):
-        print('Loading A3C parametets & ICM parameters...')
+        print('Loading A3C parametets & ICM parameters...', flush = True)
         shared_model.load_state_dict(torch.load(SAVEPATH))
         shared_icm.load_state_dict(torch.load(SAVEPATH[:-4] + '_curiosity.pkl'))
 
