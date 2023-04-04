@@ -24,7 +24,6 @@ cross_entropy = torch.nn.CrossEntropyLoss()
 
 x_norm = 3161
 
-
 def ensure_shared_grads(model, shared_model):
     for param, shared_param in zip(model.parameters(),
                                    shared_model.parameters()):
@@ -35,6 +34,7 @@ def ensure_shared_grads(model, shared_model):
 
 def train(rank, args, shared_model, shared_curiosity, shared_time_network, counter, lock, optimizer=None, optimizer_time=None, select_sample=True):
     torch.manual_seed(args.seed + rank)
+    torch.autograd.set_detect_anomaly(True)
 
     print("Process No : {} | Sampling : {}".format(rank, select_sample))
 
@@ -69,6 +69,7 @@ def train(rank, args, shared_model, shared_curiosity, shared_time_network, count
 
     episode_length = 0
     time_estimations = []
+    distance = 0
     for num_iter in count():
         #env.render()
         if rank == 0:
@@ -88,7 +89,8 @@ def train(rank, args, shared_model, shared_curiosity, shared_time_network, count
         # Sync with the shared model
         model.load_state_dict(shared_model.state_dict())
         curiosity.load_state_dict(shared_curiosity.state_dict())
-        time_network.load_state_dict(shared_time_network.state_dict())
+        if done:
+            time_network.load_state_dict(shared_time_network.state_dict())
 
         if done:
             cx = Variable(torch.zeros(1, 512)).type(FloatTensor)
@@ -104,7 +106,6 @@ def train(rank, args, shared_model, shared_curiosity, shared_time_network, count
         forward_losses = []
         inverse_losses = []
         #reason =''
-        distance = 0
         for step in range(args.num_steps):
             episode_length += 1
             state_inp = Variable(state.unsqueeze(0)).type(FloatTensor)
@@ -159,9 +160,9 @@ def train(rank, args, shared_model, shared_curiosity, shared_time_network, count
 #            env.locked_levels = [False] + [True] * 31
             state = torch.from_numpy(state)
             time_estimation = (episode_length + time_network((state_inp.detach(), action_one_hot.detach())))/args.max_episode_length
-            values.append(value/time_estimation)
+            values.append(value/time_estimation.detach())
             log_probs.append(log_prob)
-            rewards.append(reward/time_estimation)
+            rewards.append(reward/time_estimation.detach())
             forward_losses.append(forward_loss)
             inverse_losses.append(inverse_loss)
             time_estimations.append(time_estimation)
@@ -199,9 +200,10 @@ def train(rank, args, shared_model, shared_curiosity, shared_time_network, count
 
 #        print ("Process {} loss :".format(rank), total_loss.data)
         optimizer.zero_grad()
+        optimizer_time.zero_grad()
 #         cur_optimizer.zero_grad()
 
-        (total_loss + 10.0*curiosity_loss).backward(retain_graph=True)
+        (total_loss + 10.0*curiosity_loss).backward()
 #         (curiosity_loss).backward()
 
         torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
@@ -211,24 +213,11 @@ def train(rank, args, shared_model, shared_curiosity, shared_time_network, count
         ensure_shared_grads(curiosity, shared_curiosity)
 
         optimizer.step()
-        # if done:
-        #     optimizer_time.zero_grad()
-        #     if distance < 1.0:
-        #         episode_length = args.max_episode_length
-        #     time_loss = torch.mean(torch.square((torch.cat(time_estimations) - episode_length/args.max_episode_length)))
-        #     time_loss.backward()
-        #     torch.nn.utils.clip_grad_norm_(time_network.parameters(), args.max_grad_norm)
-        #
-        #     ensure_shared_grads(time_network, shared_time_network)
-        #     optimizer_time.step()
-        #     episode_length = 0
-        #     distance = 0.0
-        #     time_estimations = []
         if done:
             optimizer_time.zero_grad()
-            # if distance < 1.0:
-            #     episode_length = args.max_episode_length
-            time_loss = torch.mean(torch.square((torch.cat(time_estimations) - args.max_episode_length)))
+            if distance < 1.0:
+                episode_length = args.max_episode_length
+            time_loss = torch.mean(torch.square((torch.cat(time_estimations) - episode_length/args.max_episode_length)))
             time_loss.backward()
             torch.nn.utils.clip_grad_norm_(time_network.parameters(), args.max_grad_norm)
 
@@ -237,6 +226,7 @@ def train(rank, args, shared_model, shared_curiosity, shared_time_network, count
             episode_length = 0
             distance = 0.0
             time_estimations = []
+
 
 #    print(rank)
 #    print ("Process {} closed.".format(rank))
