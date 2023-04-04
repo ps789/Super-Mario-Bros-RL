@@ -61,6 +61,6 @@ class ITM(torch.nn.Module):
         xt, xtp1 = F.elu(self.conv4(xt)), F.elu(self.conv4(xtp1))
 
         xt, xtp1 = xt.view(-1, 288), xtp1.view(-1, 288)
-        features = torch.cat((xt, xtp1),1), torch.cat((xt, xtp1, at),1)
+        features = torch.cat((xt, xtp1, at),1)
 
-        return self.time_estimator(features), xtp1
+        return self.time_estimator(features)

@@ -33,7 +33,7 @@ def ensure_shared_grads(model, shared_model):
         shared_param._grad = param.grad
 
 
-def train(rank, args, shared_model, shared_curiosity, counter, lock, optimizer=None, select_sample=True):
+def train(rank, args, shared_model, shared_curiosity, shared_time_network, counter, lock, optimizer=None, optimizer_time=None, select_sample=True):
     torch.manual_seed(args.seed + rank)
 
     print("Process No : {} | Sampling : {}".format(rank, select_sample))
@@ -42,8 +42,8 @@ def train(rank, args, shared_model, shared_curiosity, counter, lock, optimizer=N
     DoubleTensor = torch.DoubleTensor# torch.cuda.DoubleTensor if args.use_cuda else torch.DoubleTensor
     ByteTensor = torch.ByteTensor# torch.cuda.ByteTensor if args.use_cuda else torch.ByteTensor
 
-    savefile = os.getcwd() + '/save/curiosity_'+ args.reward_type +'/train_reward.csv'
-    saveweights = os.getcwd() + '/save/curiosity_'+ args.reward_type +'/mario_a3c_params.pkl'
+    savefile = os.getcwd() + '/save/curiosity_speed_'+ args.reward_type +'/train_reward.csv'
+    saveweights = os.getcwd() + '/save/curiosity_speed_'+ args.reward_type +'/mario_a3c_params.pkl'
 
     env = create_mario_env(args.env_name, args.reward_type)
     #env.seed(args.seed + rank)
@@ -68,6 +68,7 @@ def train(rank, args, shared_model, shared_curiosity, counter, lock, optimizer=N
     done = True
 
     episode_length = 0
+    time_estimations = []
     for num_iter in count():
         #env.render()
         if rank == 0:
@@ -87,7 +88,7 @@ def train(rank, args, shared_model, shared_curiosity, counter, lock, optimizer=N
         # Sync with the shared model
         model.load_state_dict(shared_model.state_dict())
         curiosity.load_state_dict(shared_curiosity.state_dict())
-        time.load_state_dict(shared_time_network.state_dict())
+        time_network.load_state_dict(shared_time_network.state_dict())
 
         if done:
             cx = Variable(torch.zeros(1, 512)).type(FloatTensor)
@@ -103,7 +104,7 @@ def train(rank, args, shared_model, shared_curiosity, counter, lock, optimizer=N
         forward_losses = []
         inverse_losses = []
         #reason =''
-
+        distance = 0
         for step in range(args.num_steps):
             episode_length += 1
             state_inp = Variable(state.unsqueeze(0)).type(FloatTensor)
@@ -139,28 +140,28 @@ def train(rank, args, shared_model, shared_curiosity, counter, lock, optimizer=N
             int_reward = (args.eta*forward_loss).data.numpy()[0,0]
 
             reward = int_reward + reward
-            reward = max(min(reward, 50), -5)
+            reward = max(min(reward, 100), -10)
 
 
             with lock:
                 counter.value += 1
 
             if done:
-                episode_length = 0
 #                 env.change_level(0)
                 state = env.reset()
                 with open(savefile[:-4]+'_{}.csv'.format(rank), 'a', newline='') as sfile:
                     writer = csv.writer(sfile)
                     writer.writerows([[cum_rew, info['x_pos']/x_norm]])
+                distance = info['x_pos']/x_norm
                 cum_rew = 0
  #               print ("Process {} has completed.".format(rank))
 
 #            env.locked_levels = [False] + [True] * 31
             state = torch.from_numpy(state)
-            time_estimation = episode_length + time_network((state_inp, next_state_inp, action_one_hot))
-            values.append(value)
+            time_estimation = (episode_length + time_network((state_inp, next_state_inp, action_one_hot)))/args.max_episode_length
+            values.append(value/time_estimation)
             log_probs.append(log_prob)
-            rewards.append(reward)
+            rewards.append(reward/time_estimation)
             forward_losses.append(forward_loss)
             inverse_losses.append(inverse_loss)
             time_estimations.append(time_estimation)
@@ -187,7 +188,7 @@ def train(rank, args, shared_model, shared_curiosity, counter, lock, optimizer=N
             value_loss = value_loss + 0.5 * advantage.pow(2)
 
             # Generalized Advantage Estimataion
-            delta_t = rewards[i] + args.gamma * values[i + 1].data - values[i].data
+            delta_t = rewards[i] + args.gamma * values[i + 1] - values[i]
             gae = gae * args.gamma * args.tau + delta_t
 
             policy_loss = policy_loss - log_probs[i] * Variable(gae).type(FloatTensor) - args.entropy_coef * entropies[i]
@@ -210,13 +211,19 @@ def train(rank, args, shared_model, shared_curiosity, counter, lock, optimizer=N
         ensure_shared_grads(curiosity, shared_curiosity)
 
         optimizer.step()
-        optimizer_time.zero_grad()
-        #insert time stufff
-        torch.nn.utils.clip_grad_norm_(time_network.parameters(), args.max_grad_norm)
+        if done:
+            optimizer_time.zero_grad()
+            if distance < 1.0:
+                episode_length = args.max_episode_length
+            time_loss = torch.mean((time_estimations - episode_length/args.max_episode_length)**2)
+            time_loss.backward()
+            torch.nn.utils.clip_grad_norm_(time_network.parameters(), args.max_grad_norm)
 
-
-        ensure_shared_grads(time_network, shared_time_network)
-        optimizer_time.step()
+            ensure_shared_grads(time_network, shared_time_network)
+            optimizer_time.step()
+            episode_length = 0
+            distance = 0.0
+            time_estimations = []
 
 #    print(rank)
 #    print ("Process {} closed.".format(rank))
