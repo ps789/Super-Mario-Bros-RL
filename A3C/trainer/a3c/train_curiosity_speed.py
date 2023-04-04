@@ -159,7 +159,7 @@ def train(rank, args, shared_model, shared_curiosity, shared_time_network, count
 
 #            env.locked_levels = [False] + [True] * 31
             state = torch.from_numpy(state)
-            time_estimation = (episode_length + time_network((state_inp.detach(), action_one_hot.detach())))/args.max_episode_length
+            time_estimation = torch.min((episode_length + time_network((state_inp.detach(), action_one_hot.detach())))/args.max_episode_length, torch.Tensor([1.]))
             values.append(value/time_estimation.detach())
             log_probs.append(log_prob)
             rewards.append(reward/time_estimation.detach())
@@ -217,7 +217,7 @@ def train(rank, args, shared_model, shared_curiosity, shared_time_network, count
             optimizer_time.zero_grad()
             if distance < 1.0:
                 episode_length = args.max_episode_length
-            time_loss = torch.mean(torch.square((torch.max(torch.cat(time_estimations), args.max_episode_length) - episode_length/args.max_episode_length)))
+            time_loss = torch.mean(torch.square((torch.cat(time_estimations) - episode_length/args.max_episode_length)))
             time_loss.backward()
             print(time_loss, flush = True)
             torch.nn.utils.clip_grad_norm_(time_network.parameters(), args.max_grad_norm)
