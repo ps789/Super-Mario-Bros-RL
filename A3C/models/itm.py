@@ -36,7 +36,7 @@ class ITM(torch.nn.Module):
         self.conv3 = nn.Conv2d(32, 32, 3, stride=2, padding=1)
         self.conv4 = nn.Conv2d(32, 32, 3, stride=2, padding=1)
 
-        lin1 = nn.Linear(num_actions + 288*2, 256)
+        lin1 = nn.Linear(num_actions + 288, 256)
         lin2 = nn.Linear(256, 1)
 
         self.apply(weights_init)
@@ -52,15 +52,15 @@ class ITM(torch.nn.Module):
         self.train()
 
     def forward(self, inputs):
-        st, stp1, at = inputs
+        st, at = inputs
 
-        xt, xtp1 = self.downsample(st), self.downsample(stp1)
-        xt, xtp1 = F.elu(self.conv1(xt)), F.elu(self.conv1(xtp1))
-        xt, xtp1 = F.elu(self.conv2(xt)), F.elu(self.conv2(xtp1))
-        xt, xtp1 = F.elu(self.conv3(xt)), F.elu(self.conv3(xtp1))
-        xt, xtp1 = F.elu(self.conv4(xt)), F.elu(self.conv4(xtp1))
+        xt = self.downsample(st)
+        xt = F.elu(self.conv1(xt))
+        xt = F.elu(self.conv2(xt))
+        xt = F.elu(self.conv3(xt))
+        xt = F.elu(self.conv4(xt))
 
-        xt, xtp1 = xt.view(-1, 288), xtp1.view(-1, 288)
-        features = torch.cat((xt, xtp1, at),1)
+        xt = xt.view(-1, 288)
+        features = torch.cat((xt, at),1)
 
         return self.time_estimator(features)

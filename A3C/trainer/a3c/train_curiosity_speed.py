@@ -158,7 +158,7 @@ def train(rank, args, shared_model, shared_curiosity, shared_time_network, count
 
 #            env.locked_levels = [False] + [True] * 31
             state = torch.from_numpy(state)
-            time_estimation = (episode_length + time_network((state_inp, next_state_inp, action_one_hot)))/args.max_episode_length
+            time_estimation = (episode_length + time_network((state_inp.detach(), action_one_hot.detach())))/args.max_episode_length
             values.append(value/time_estimation)
             log_probs.append(log_prob)
             rewards.append(reward/time_estimation)
@@ -201,7 +201,7 @@ def train(rank, args, shared_model, shared_curiosity, shared_time_network, count
         optimizer.zero_grad()
 #         cur_optimizer.zero_grad()
 
-        (total_loss + 10.0*curiosity_loss).backward()
+        (total_loss + 10.0*curiosity_loss).backward(retain_graph=True)
 #         (curiosity_loss).backward()
 
         torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
@@ -211,11 +211,24 @@ def train(rank, args, shared_model, shared_curiosity, shared_time_network, count
         ensure_shared_grads(curiosity, shared_curiosity)
 
         optimizer.step()
+        # if done:
+        #     optimizer_time.zero_grad()
+        #     if distance < 1.0:
+        #         episode_length = args.max_episode_length
+        #     time_loss = torch.mean(torch.square((torch.cat(time_estimations) - episode_length/args.max_episode_length)))
+        #     time_loss.backward()
+        #     torch.nn.utils.clip_grad_norm_(time_network.parameters(), args.max_grad_norm)
+        #
+        #     ensure_shared_grads(time_network, shared_time_network)
+        #     optimizer_time.step()
+        #     episode_length = 0
+        #     distance = 0.0
+        #     time_estimations = []
         if done:
             optimizer_time.zero_grad()
-            if distance < 1.0:
-                episode_length = args.max_episode_length
-            time_loss = torch.mean((time_estimations - episode_length/args.max_episode_length)**2)
+            # if distance < 1.0:
+            #     episode_length = args.max_episode_length
+            time_loss = torch.mean(torch.square((torch.cat(time_estimations) - args.max_episode_length)))
             time_loss.backward()
             torch.nn.utils.clip_grad_norm_(time_network.parameters(), args.max_grad_norm)
 
