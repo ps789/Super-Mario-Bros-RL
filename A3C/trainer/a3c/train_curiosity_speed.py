@@ -217,10 +217,11 @@ def train(rank, args, shared_model, shared_curiosity, shared_time_network, count
             optimizer_time.zero_grad()
             if distance < 1.0:
                 episode_length = args.max_episode_length
-            time_loss = torch.mean(torch.square((torch.cat(time_estimations) - episode_length/args.max_episode_length)))
+            time_loss = torch.mean(torch.square((torch.stack(time_estimations) - episode_length/args.max_episode_length)))
             time_loss.backward()
             print(time_loss, flush = True)
-            torch.nn.utils.clip_grad_norm_(time_network.parameters(), args.max_grad_norm)
+            print(time_estimations, flush = True)
+            #torch.nn.utils.clip_grad_norm_(time_network.parameters(), args.max_grad_norm)
 
             ensure_shared_grads(time_network, shared_time_network)
             optimizer_time.step()
