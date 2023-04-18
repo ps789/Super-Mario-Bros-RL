@@ -255,7 +255,7 @@ def test(rank, args, shared_model, counter):
     state = torch.from_numpy(state)
     reward_sum = 0
     done = True
-    savefile = os.getcwd() + '/save/curiosity_'+ args.reward_type +'/mario_curves.csv'
+    savefile = os.getcwd() + '/save/curiosity_speed_'+ args.reward_type +'/mario_curves.csv'
 
     title = ['Time','No. Steps', 'Total Reward', 'final_position', 'Episode Length']
     with open(savefile, 'a', newline='') as sfile:

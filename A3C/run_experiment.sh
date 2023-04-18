@@ -1,3 +1,3 @@
 #!/bin/bash
 /usr/bin/ps789
-python train-mario-curiosity.py --reward_type sparse
+python train-mario-curiosity-speed.py --reward_type sparse
