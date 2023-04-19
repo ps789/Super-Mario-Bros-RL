@@ -137,11 +137,10 @@ def train(rank, args, shared_model, shared_curiosity, shared_time_network, count
             forward_loss = ((pred_phi - actual_phi).pow(2)).sum(-1, keepdim=True)/2
 
             done = done or episode_length >= args.max_episode_length
-
             int_reward = (args.eta*forward_loss).data.numpy()[0,0]
 
             reward = int_reward + reward
-            reward = max(min(reward, 100), -10)
+            reward = max(min(reward, 50), -5)
 
 
             with lock:
@@ -215,16 +214,17 @@ def train(rank, args, shared_model, shared_curiosity, shared_time_network, count
         optimizer.step()
         if done:
             optimizer_time.zero_grad()
+            #print(episode_length, flush = True)
             if distance < 1.0:
                 episode_length = args.max_episode_length
             time_loss = torch.mean(torch.square((torch.stack(time_estimations) - episode_length/args.max_episode_length)))
             time_loss.backward()
-            print(time_loss, flush = True)
-            print(time_estimations, flush = True)
-            #torch.nn.utils.clip_grad_norm_(time_network.parameters(), args.max_grad_norm)
+            #print("time loss", flush = True)
+            #print(time_loss, flush = True)
+            torch.nn.utils.clip_grad_norm_(time_network.parameters(), args.max_grad_norm)
 
             ensure_shared_grads(time_network, shared_time_network)
-            optimizer_time.step()
+            #optimizer_time.step()
             episode_length = 0
             distance = 0.0
             time_estimations = []

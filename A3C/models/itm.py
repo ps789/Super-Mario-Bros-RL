@@ -45,7 +45,7 @@ class ITM(torch.nn.Module):
         lin1.bias.data.fill_(0)
         lin2.weight.data = normalized_columns_initializer(
             lin2.weight.data, 0.01)
-        lin2.bias.data.fill_(0)
+        lin2.bias.data.fill_(10000)
 
         self.time_estimator = nn.Sequential(lin1, nn.ReLU(), lin2)
 

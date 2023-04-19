@@ -127,7 +127,8 @@ def train(rank, args, shared_model, shared_curiosity, counter, lock, optimizer=N
             forward_loss = ((pred_phi - actual_phi).pow(2)).sum(-1, keepdim=True)/2
 
             done = done or episode_length >= args.max_episode_length
-
+            if done:
+                print(f"episode length: {episode_length}")
             int_reward = (args.eta*forward_loss).data.numpy()[0,0]
 
             reward = int_reward + reward
